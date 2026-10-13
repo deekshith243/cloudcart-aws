@@ -10,10 +10,12 @@ if (!databaseUrl) {
   throw new Error('DATABASE_URL must be set before seeding');
 }
 
+const useDatabaseSsl = process.env.DATABASE_SSL?.toLowerCase() !== 'false';
+
 const prisma = new PrismaClient({
   adapter: new PrismaPg({
     connectionString: databaseUrl,
-    ssl: { rejectUnauthorized: false },
+    ...(useDatabaseSsl ? { ssl: { rejectUnauthorized: false } } : {}),
   }),
 });
 
