@@ -53,28 +53,10 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
-resource "aws_eip" "nat" {
-  count  = var.single_nat_gateway ? 1 : length(local.selected_azs)
-  domain = "vpc"
-}
-
-resource "aws_nat_gateway" "this" {
-  count = var.single_nat_gateway ? 1 : length(local.selected_azs)
-
-  allocation_id = aws_eip.nat[count.index].id
-  subnet_id     = aws_subnet.public[var.single_nat_gateway ? 0 : count.index].id
-  depends_on    = [aws_internet_gateway.this]
-}
-
 resource "aws_route_table" "private" {
   count = length(local.selected_azs)
 
   vpc_id = aws_vpc.this.id
-
-  route {
-    cidr_block     = "0.0.0.0/0"
-    nat_gateway_id = aws_nat_gateway.this[var.single_nat_gateway ? 0 : count.index].id
-  }
 }
 
 resource "aws_route_table_association" "private" {

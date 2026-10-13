@@ -1,12 +1,14 @@
 resource "aws_lb" "this" {
+  count              = var.enable_alb ? 1 : 0
   name               = substr(local.name_prefix, 0, 32)
   internal           = false
   load_balancer_type = "application"
-  security_groups    = [aws_security_group.alb.id]
+  security_groups    = [aws_security_group.alb[0].id]
   subnets            = aws_subnet.public[*].id
 }
 
 resource "aws_lb_target_group" "backend" {
+  count       = var.enable_alb ? 1 : 0
   name        = substr("${local.name_prefix}-api", 0, 32)
   port        = 4000
   protocol    = "HTTP"
@@ -27,6 +29,7 @@ resource "aws_lb_target_group" "backend" {
 }
 
 resource "aws_lb_target_group" "frontend" {
+  count       = var.enable_alb ? 1 : 0
   name        = substr("${local.name_prefix}-web", 0, 32)
   port        = 8080
   protocol    = "HTTP"
@@ -47,22 +50,22 @@ resource "aws_lb_target_group" "frontend" {
 }
 
 resource "aws_lb_listener" "http_forward" {
-  count = var.acm_certificate_arn == "" ? 1 : 0
+  count = var.enable_alb && var.acm_certificate_arn == "" ? 1 : 0
 
-  load_balancer_arn = aws_lb.this.arn
+  load_balancer_arn = aws_lb.this[0].arn
   port              = 80
   protocol          = "HTTP"
 
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.frontend.arn
+    target_group_arn = aws_lb_target_group.frontend[0].arn
   }
 }
 
 resource "aws_lb_listener" "http_redirect" {
-  count = var.acm_certificate_arn == "" ? 0 : 1
+  count = var.enable_alb && var.acm_certificate_arn != "" ? 1 : 0
 
-  load_balancer_arn = aws_lb.this.arn
+  load_balancer_arn = aws_lb.this[0].arn
   port              = 80
   protocol          = "HTTP"
 
@@ -78,9 +81,9 @@ resource "aws_lb_listener" "http_redirect" {
 }
 
 resource "aws_lb_listener" "https" {
-  count = var.acm_certificate_arn == "" ? 0 : 1
+  count = var.enable_alb && var.acm_certificate_arn != "" ? 1 : 0
 
-  load_balancer_arn = aws_lb.this.arn
+  load_balancer_arn = aws_lb.this[0].arn
   port              = 443
   protocol          = "HTTPS"
   certificate_arn   = var.acm_certificate_arn
@@ -88,19 +91,19 @@ resource "aws_lb_listener" "https" {
 
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.frontend.arn
+    target_group_arn = aws_lb_target_group.frontend[0].arn
   }
 }
 
 resource "aws_lb_listener_rule" "http_backend" {
-  count = var.acm_certificate_arn == "" ? 1 : 0
+  count = var.enable_alb && var.acm_certificate_arn == "" ? 1 : 0
 
   listener_arn = aws_lb_listener.http_forward[0].arn
   priority     = 10
 
   action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.backend.arn
+    target_group_arn = aws_lb_target_group.backend[0].arn
   }
 
   condition {
@@ -111,14 +114,14 @@ resource "aws_lb_listener_rule" "http_backend" {
 }
 
 resource "aws_lb_listener_rule" "https_backend" {
-  count = var.acm_certificate_arn == "" ? 0 : 1
+  count = var.enable_alb && var.acm_certificate_arn != "" ? 1 : 0
 
   listener_arn = aws_lb_listener.https[0].arn
   priority     = 10
 
   action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.backend.arn
+    target_group_arn = aws_lb_target_group.backend[0].arn
   }
 
   condition {

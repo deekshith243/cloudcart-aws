@@ -4,14 +4,16 @@ resource "random_password" "jwt" {
 }
 
 resource "aws_secretsmanager_secret" "database_url" {
+  count                   = var.enable_rds ? 1 : 0
   name                    = "${local.name_prefix}/database-url"
   recovery_window_in_days = 7
 }
 
 resource "aws_secretsmanager_secret_version" "database_url" {
-  secret_id = aws_secretsmanager_secret.database_url.id
+  count     = var.enable_rds ? 1 : 0
+  secret_id = aws_secretsmanager_secret.database_url[0].id
   secret_string = jsonencode({
-    DATABASE_URL = "postgresql://${var.database_username}:${urlencode(random_password.database.result)}@${aws_db_instance.postgres.address}:${aws_db_instance.postgres.port}/${var.database_name}?schema=public"
+    DATABASE_URL = "postgresql://${var.database_username}:${urlencode(random_password.database[0].result)}@${aws_db_instance.postgres[0].address}:${aws_db_instance.postgres[0].port}/${var.database_name}?schema=public"
   })
 }
 

@@ -1,7 +1,7 @@
 variable "aws_region" {
   description = "AWS region for all CloudCart resources."
   type        = string
-  default     = "us-east-1"
+  default     = "ap-south-1"
 }
 
 variable "project_name" {
@@ -34,7 +34,7 @@ variable "vpc_cidr" {
 }
 
 variable "public_subnet_cidrs" {
-  description = "CIDR blocks for public ALB/NAT subnets, one per selected AZ."
+  description = "CIDR blocks for public ALB/ECS subnets, one per selected AZ."
   type        = list(string)
   default     = ["10.42.1.0/24", "10.42.2.0/24"]
 
@@ -45,7 +45,7 @@ variable "public_subnet_cidrs" {
 }
 
 variable "private_subnet_cidrs" {
-  description = "CIDR blocks for private ECS/data subnets, one per selected AZ."
+  description = "CIDR blocks for private data subnets, one per selected AZ."
   type        = list(string)
   default     = ["10.42.11.0/24", "10.42.12.0/24"]
 
@@ -53,12 +53,6 @@ variable "private_subnet_cidrs" {
     condition     = length(var.private_subnet_cidrs) >= 2
     error_message = "private_subnet_cidrs must contain at least two CIDR blocks."
   }
-}
-
-variable "single_nat_gateway" {
-  description = "Use one NAT gateway to reduce interview/development cost."
-  type        = bool
-  default     = true
 }
 
 variable "backend_image" {
@@ -85,6 +79,12 @@ variable "acm_certificate_arn" {
   description = "Optional ACM certificate ARN. When set, HTTPS is created and HTTP redirects to it."
   type        = string
   default     = ""
+}
+
+variable "enable_alb" {
+  description = "Create the public Application Load Balancer and its routing resources."
+  type        = bool
+  default     = false
 }
 
 variable "s3_bucket_name" {
@@ -117,6 +117,12 @@ variable "database_name" {
   default     = "cloudcart"
 }
 
+variable "enable_rds" {
+  description = "Create the RDS database when enabled."
+  type        = bool
+  default     = false
+}
+
 variable "database_username" {
   description = "RDS master username; password is generated and stored in Secrets Manager."
   type        = string
@@ -145,6 +151,12 @@ variable "redis_node_type" {
   description = "Small ElastiCache Redis node type for interview/development use."
   type        = string
   default     = "cache.t4g.micro"
+}
+
+variable "enable_redis" {
+  description = "Create ElastiCache Redis and configure the backend to use it."
+  type        = bool
+  default     = false
 }
 
 variable "log_retention_days" {

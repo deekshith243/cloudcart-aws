@@ -1,4 +1,4 @@
-aws_region     = "us-east-1"
+aws_region     = "ap-south-1"
 project_name   = "cloudcart"
 environment    = "production"
 frontend_origin = "https://frontend.example.com"
@@ -14,8 +14,16 @@ acm_certificate_arn = ""
 # Leave empty to derive a globally unique name from account ID and region.
 s3_bucket_name = ""
 
-# Keep one NAT gateway for lower interview/development cost. Use false for AZ-level resilience.
-single_nat_gateway = true
+# RDS is disabled for the initial low-cost infrastructure deployment. Enable it
+# before running database migrations or enabling the backend ECS service.
+enable_rds = false
+
+# Redis is optional; the backend runs with its existing no-cache behavior when disabled.
+enable_redis = false
+
+# The ALB is disabled for the initial low-cost infrastructure deployment.
+enable_alb = false
+
 enable_ecs_services = false
 
 order_queue_name = "cloudcart-order-events"

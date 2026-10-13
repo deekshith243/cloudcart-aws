@@ -21,21 +21,29 @@ resource "aws_ecs_task_definition" "backend" {
         hostPort      = 4000
         protocol      = "tcp"
       }]
-      environment = [
-        { name = "NODE_ENV", value = "production" },
-        { name = "PORT", value = "4000" },
-        { name = "AWS_REGION", value = var.aws_region },
-        { name = "AWS_S3_BUCKET", value = aws_s3_bucket.product_images.bucket },
-        { name = "AWS_S3_PRESIGNED_URL_EXPIRES_IN", value = "900" },
-        { name = "AWS_SQS_ORDER_QUEUE_URL", value = aws_sqs_queue.order_events.url },
-        { name = "AWS_SNS_ORDER_TOPIC_ARN", value = aws_sns_topic.order_events.arn },
-        { name = "REDIS_URL", value = "rediss://${aws_elasticache_replication_group.redis.primary_endpoint_address}:${aws_elasticache_replication_group.redis.port}" },
-        { name = "CORS_ORIGIN", value = var.frontend_origin }
-      ]
-      secrets = [
-        { name = "DATABASE_URL", valueFrom = "${aws_secretsmanager_secret.database_url.arn}:DATABASE_URL::" },
-        { name = "JWT_SECRET", valueFrom = "${aws_secretsmanager_secret.jwt.arn}:JWT_SECRET::" }
-      ]
+      environment = concat(
+        [
+          { name = "NODE_ENV", value = "production" },
+          { name = "PORT", value = "4000" },
+          { name = "AWS_REGION", value = var.aws_region },
+          { name = "AWS_S3_BUCKET", value = aws_s3_bucket.product_images.bucket },
+          { name = "AWS_S3_PRESIGNED_URL_EXPIRES_IN", value = "900" },
+          { name = "AWS_SQS_ORDER_QUEUE_URL", value = aws_sqs_queue.order_events.url },
+          { name = "AWS_SNS_ORDER_TOPIC_ARN", value = aws_sns_topic.order_events.arn },
+          { name = "CORS_ORIGIN", value = var.frontend_origin }
+        ],
+        var.enable_redis ? [
+          { name = "REDIS_URL", value = "rediss://${aws_elasticache_replication_group.redis[0].primary_endpoint_address}:${aws_elasticache_replication_group.redis[0].port}" }
+        ] : []
+      )
+      secrets = concat(
+        [
+          { name = "JWT_SECRET", valueFrom = "${aws_secretsmanager_secret.jwt.arn}:JWT_SECRET::" }
+        ],
+        var.enable_rds ? [
+          { name = "DATABASE_URL", valueFrom = "${aws_secretsmanager_secret.database_url[0].arn}:DATABASE_URL::" }
+        ] : []
+      )
       healthCheck = {
         command     = ["CMD-SHELL", "wget --spider -q http://127.0.0.1:4000/health || exit 1"]
         interval    = 30
@@ -54,7 +62,10 @@ resource "aws_ecs_task_definition" "backend" {
     }
   ])
 
-  depends_on = [aws_secretsmanager_secret_version.database_url, aws_secretsmanager_secret_version.jwt]
+  depends_on = [
+    aws_secretsmanager_secret_version.jwt,
+    aws_secretsmanager_secret_version.database_url
+  ]
 }
 
 resource "aws_ecs_task_definition" "worker" {
@@ -140,15 +151,18 @@ resource "aws_ecs_service" "backend" {
   }
 
   network_configuration {
-    subnets          = aws_subnet.private[*].id
+    subnets          = aws_subnet.public[*].id
     security_groups  = [aws_security_group.backend.id]
-    assign_public_ip = false
+    assign_public_ip = true
   }
 
-  load_balancer {
-    target_group_arn = aws_lb_target_group.backend.arn
-    container_name   = "backend"
-    container_port   = 4000
+  dynamic "load_balancer" {
+    for_each = var.enable_alb ? [1] : []
+    content {
+      target_group_arn = aws_lb_target_group.backend[0].arn
+      container_name   = "backend"
+      container_port   = 4000
+    }
   }
 }
 
@@ -166,9 +180,9 @@ resource "aws_ecs_service" "worker" {
   }
 
   network_configuration {
-    subnets          = aws_subnet.private[*].id
+    subnets          = aws_subnet.public[*].id
     security_groups  = [aws_security_group.worker.id]
-    assign_public_ip = false
+    assign_public_ip = true
   }
 }
 
@@ -186,14 +200,17 @@ resource "aws_ecs_service" "frontend" {
   }
 
   network_configuration {
-    subnets          = aws_subnet.private[*].id
+    subnets          = aws_subnet.public[*].id
     security_groups  = [aws_security_group.frontend.id]
-    assign_public_ip = false
+    assign_public_ip = true
   }
 
-  load_balancer {
-    target_group_arn = aws_lb_target_group.frontend.arn
-    container_name   = "frontend"
-    container_port   = 8080
+  dynamic "load_balancer" {
+    for_each = var.enable_alb ? [1] : []
+    content {
+      target_group_arn = aws_lb_target_group.frontend[0].arn
+      container_name   = "frontend"
+      container_port   = 8080
+    }
   }
 }

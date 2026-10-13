@@ -1,4 +1,5 @@
 resource "aws_security_group" "alb" {
+  count       = var.enable_alb ? 1 : 0
   name        = "${local.name_prefix}-alb"
   description = "Public HTTP/HTTPS ingress for the CloudCart ALB."
   vpc_id      = aws_vpc.this.id
@@ -32,15 +33,18 @@ resource "aws_security_group" "alb" {
 
 resource "aws_security_group" "backend" {
   name        = "${local.name_prefix}-backend"
-  description = "Private backend ECS ingress and outbound application access."
+  description = "Backend ECS ingress and outbound application access."
   vpc_id      = aws_vpc.this.id
 
-  ingress {
-    description     = "Backend API from the ALB only"
-    protocol        = "tcp"
-    from_port       = 4000
-    to_port         = 4000
-    security_groups = [aws_security_group.alb.id]
+  dynamic "ingress" {
+    for_each = var.enable_alb ? [1] : []
+    content {
+      description     = "Backend API from the ALB only"
+      protocol        = "tcp"
+      from_port       = 4000
+      to_port         = 4000
+      security_groups = [aws_security_group.alb[0].id]
+    }
   }
 
   egress {
@@ -53,7 +57,7 @@ resource "aws_security_group" "backend" {
 
 resource "aws_security_group" "worker" {
   name        = "${local.name_prefix}-worker"
-  description = "Private worker ECS security group with no inbound rules."
+  description = "Worker ECS security group with no inbound rules."
   vpc_id      = aws_vpc.this.id
 
   egress {
@@ -65,6 +69,7 @@ resource "aws_security_group" "worker" {
 }
 
 resource "aws_security_group" "rds" {
+  count       = var.enable_rds ? 1 : 0
   name        = "${local.name_prefix}-rds"
   description = "Private PostgreSQL ingress from the backend ECS security group."
   vpc_id      = aws_vpc.this.id
@@ -86,6 +91,7 @@ resource "aws_security_group" "rds" {
 }
 
 resource "aws_security_group" "redis" {
+  count       = var.enable_redis ? 1 : 0
   name        = "${local.name_prefix}-redis"
   description = "Private Redis ingress from the backend ECS security group."
   vpc_id      = aws_vpc.this.id
@@ -108,15 +114,18 @@ resource "aws_security_group" "redis" {
 
 resource "aws_security_group" "frontend" {
   name        = "${local.name_prefix}-frontend"
-  description = "Private frontend ECS ingress from the ALB."
+  description = "Frontend ECS ingress from the ALB."
   vpc_id      = aws_vpc.this.id
 
-  ingress {
-    description     = "Frontend from the ALB only"
-    protocol        = "tcp"
-    from_port       = 8080
-    to_port         = 8080
-    security_groups = [aws_security_group.alb.id]
+  dynamic "ingress" {
+    for_each = var.enable_alb ? [1] : []
+    content {
+      description     = "Frontend from the ALB only"
+      protocol        = "tcp"
+      from_port       = 8080
+      to_port         = 8080
+      security_groups = [aws_security_group.alb[0].id]
+    }
   }
 
   egress {

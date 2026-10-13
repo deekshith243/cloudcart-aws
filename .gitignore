@@ -12,3 +12,11 @@ terraform.tfstate
 terraform.tfstate.*
 crash.log
 infrastructure/terraform/terraform.tfvars
+
+
+
+
+
+
+# Terraform plan files
+*.tfplan

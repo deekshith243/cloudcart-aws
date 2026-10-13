@@ -26,9 +26,12 @@ resource "aws_iam_role_policy" "ecs_execution_secrets" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Effect   = "Allow"
-      Action   = ["secretsmanager:DescribeSecret", "secretsmanager:GetSecretValue"]
-      Resource = [aws_secretsmanager_secret.database_url.arn, aws_secretsmanager_secret.jwt.arn]
+      Effect = "Allow"
+      Action = ["secretsmanager:DescribeSecret", "secretsmanager:GetSecretValue"]
+      Resource = concat(
+        [aws_secretsmanager_secret.jwt.arn],
+        var.enable_rds ? [aws_secretsmanager_secret.database_url[0].arn] : []
+      )
     }]
   })
 }

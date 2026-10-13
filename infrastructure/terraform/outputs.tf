@@ -5,12 +5,12 @@ output "vpc_id" {
 
 output "alb_dns_name" {
   description = "Public ALB DNS name."
-  value       = aws_lb.this.dns_name
+  value       = var.enable_alb ? aws_lb.this[0].dns_name : null
 }
 
 output "frontend_url" {
   description = "Frontend URL; use HTTPS after supplying an ACM certificate and DNS name."
-  value       = var.acm_certificate_arn == "" ? "http://${aws_lb.this.dns_name}" : "https://${aws_lb.this.dns_name}"
+  value       = var.enable_alb ? (var.acm_certificate_arn == "" ? "http://${aws_lb.this[0].dns_name}" : "https://${aws_lb.this[0].dns_name}") : null
 }
 
 output "ecr_repository_urls" {
@@ -39,12 +39,12 @@ output "sns_topic_arn" {
 
 output "rds_endpoint" {
   description = "Private RDS PostgreSQL endpoint."
-  value       = aws_db_instance.postgres.address
+  value       = var.enable_rds ? aws_db_instance.postgres[0].address : null
 }
 
 output "redis_endpoint" {
   description = "Private ElastiCache Redis endpoint."
-  value       = aws_elasticache_replication_group.redis.primary_endpoint_address
+  value       = var.enable_redis ? aws_elasticache_replication_group.redis[0].primary_endpoint_address : null
 }
 
 output "ecs_cluster_name" {
@@ -54,7 +54,7 @@ output "ecs_cluster_name" {
 
 output "database_url_secret_arn" {
   description = "Secrets Manager ARN containing the generated DATABASE_URL."
-  value       = aws_secretsmanager_secret.database_url.arn
+  value       = var.enable_rds ? aws_secretsmanager_secret.database_url[0].arn : null
 }
 
 output "jwt_secret_arn" {
