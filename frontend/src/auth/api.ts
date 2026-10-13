@@ -1,6 +1,12 @@
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:4000';
 const TOKEN_KEY = 'cloudcart_access_token';
 
+export const resolveApiUrl = (baseUrl: string, path: string): string => {
+  const normalizedBaseUrl = baseUrl.replace(/\/+$/, '');
+  const normalizedPath = path.replace(/^\/+/, '');
+  return `${normalizedBaseUrl}/${normalizedPath}`;
+};
+
 export type AuthUser = {
   id: string;
   name: string;
@@ -93,7 +99,7 @@ export class ApiError extends Error {
 
 const request = async <T>(path: string, options: RequestInit = {}): Promise<T> => {
   const token = sessionStorage.getItem(TOKEN_KEY);
-  const response = await fetch(`${API_URL}${path}`, {
+  const response = await fetch(resolveApiUrl(API_URL, path), {
     ...options,
     headers: {
       'Content-Type': 'application/json',

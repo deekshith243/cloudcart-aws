@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { authApi, catalogApi } from './api';
+import { authApi, catalogApi, resolveApiUrl } from './api';
 import { resolveImageSource } from '../catalog/image-utils';
 
 const storage = new Map<string, string>();
@@ -20,6 +20,18 @@ describe('frontend auth API', () => {
     storage.clear();
     vi.restoreAllMocks();
   });
+
+  it.each([
+    ['/', '/api/v1/auth/login', '/api/v1/auth/login'],
+    ['/', '//api/v1/auth/login', '/api/v1/auth/login'],
+    ['http://localhost:4000', '/api/v1/auth/login', 'http://localhost:4000/api/v1/auth/login'],
+    ['https://api.example.com/', '/api/v1/auth/login', 'https://api.example.com/api/v1/auth/login'],
+  ])(
+    'joins relative and absolute API URLs without duplicate slashes',
+    (baseUrl, path, expected) => {
+      expect(resolveApiUrl(baseUrl, path)).toBe(expected);
+    },
+  );
 
   it('stores the access token after login and sends it to /me', async () => {
     const fetchMock = vi
