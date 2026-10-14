@@ -14,6 +14,52 @@ import { AdminOrdersPage, CartPage, OrderDetailsPage, OrdersPage } from './comme
 
 type AuthMode = 'login' | 'register';
 
+const customerOpenStatuses = new Set<Order['status']>(['PENDING', 'PROCESSING', 'SHIPPED']);
+
+const toDateKey = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
+const getCustomerDashboard = (orders: Order[], now = new Date()): DashboardStats => {
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const revenueStart = new Date(today);
+  revenueStart.setDate(revenueStart.getDate() - 29);
+  const revenueByDate = new Map<string, number>();
+
+  for (let offset = 0; offset < 30; offset += 1) {
+    const date = new Date(revenueStart);
+    date.setDate(revenueStart.getDate() + offset);
+    revenueByDate.set(toDateKey(date), 0);
+  }
+
+  const nonCancelledOrders = orders.filter((order) => order.status !== 'CANCELLED');
+  for (const order of nonCancelledOrders) {
+    const amount = Number(order.totalAmount);
+    const orderDate = new Date(order.createdAt);
+    const dateKey = toDateKey(orderDate);
+    if (revenueByDate.has(dateKey)) {
+      revenueByDate.set(dateKey, (revenueByDate.get(dateKey) ?? 0) + amount);
+    }
+  }
+
+  return {
+    totalProducts: 0,
+    totalCategories: 0,
+    productsInStock: 0,
+    productsOutOfStock: 0,
+    grossVolume: nonCancelledOrders.reduce((total, order) => total + Number(order.totalAmount), 0),
+    ordersToday: orders.filter((order) => {
+      const createdAt = new Date(order.createdAt);
+      return (
+        createdAt.getFullYear() === today.getFullYear() &&
+        createdAt.getMonth() === today.getMonth() &&
+        createdAt.getDate() === today.getDate()
+      );
+    }).length,
+    openFulfillment: orders.filter((order) => customerOpenStatuses.has(order.status)).length,
+    revenue: [...revenueByDate].map(([date, revenue]) => ({ date, revenue })),
+  };
+};
+
 function AuthScreen() {
 
   const { error, login, register } = useAuth();
@@ -194,26 +240,71 @@ function Dashboard() {
 
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
   const [dashboard, setDashboard] = useState<DashboardStats | null>(null);
-  const [dashboardLoading, setDashboardLoading] = useState(user?.role === 'ADMIN');
+  const [dashboardLoading, setDashboardLoading] = useState(true);
+  const [recentOrdersLoading, setRecentOrdersLoading] = useState(true);
   const [dashboardError, setDashboardError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (user?.role !== 'ADMIN') return;
+    if (!user) return;
 
-    commerceApi
-      .getAdminDashboard()
-      .then((response) => setDashboard(response.data))
-      .catch((error: unknown) => {
-        setDashboardError(error instanceof Error ? error.message : 'Unable to load dashboard');
-      })
-      .finally(() => setDashboardLoading(false));
+    let active = true;
+    setDashboard(null);
+    setRecentOrders([]);
+    setDashboardLoading(true);
+    setRecentOrdersLoading(true);
+    setDashboardError(null);
 
-    commerceApi
-      .listAdminOrders()
-      .then((response) => setRecentOrders(response.data.items.slice(0, 3)))
-      .catch((error: unknown) => {
-        console.error('Unable to load recent orders:', error);
-      });
+    if (user.role === 'ADMIN') {
+      commerceApi
+        .getAdminDashboard()
+        .then((response) => {
+          if (active) setDashboard(response.data);
+        })
+        .catch((error: unknown) => {
+          if (active) {
+            setDashboardError(error instanceof Error ? error.message : 'Unable to load dashboard');
+          }
+        })
+        .finally(() => {
+          if (active) setDashboardLoading(false);
+        });
+
+      commerceApi
+        .listAdminOrders()
+        .then((response) => {
+          if (active) setRecentOrders(response.data.items.slice(0, 3));
+        })
+        .catch((error: unknown) => {
+          console.error('Unable to load recent orders:', error);
+        })
+        .finally(() => {
+          if (active) setRecentOrdersLoading(false);
+        });
+    } else {
+      commerceApi
+        .listOrders('limit=100')
+        .then((response) => {
+          if (!active) return;
+          const orders = response.data.items;
+          setDashboard(getCustomerDashboard(orders));
+          setRecentOrders(orders.slice(0, 3));
+        })
+        .catch((error: unknown) => {
+          if (active) {
+            setDashboardError(error instanceof Error ? error.message : 'Unable to load customer orders');
+          }
+        })
+        .finally(() => {
+          if (active) {
+            setDashboardLoading(false);
+            setRecentOrdersLoading(false);
+          }
+        });
+    }
+
+    return () => {
+      active = false;
+    };
   }, [user]);
 
   if (!user) return null;
@@ -388,7 +479,7 @@ function Dashboard() {
 
               <span>Gross volume</span>
 
-              <strong>{formatCurrency(dashboard?.grossVolume ?? 0)}</strong>
+              <strong>{dashboardLoading ? '—' : formatCurrency(dashboard?.grossVolume ?? 0)}</strong>
               <small>{dashboardLoading ? 'Loading...' : 'All non-cancelled orders'}</small>
 
             </article>
@@ -397,8 +488,8 @@ function Dashboard() {
 
               <span>Orders today</span>
 
-              <strong>{dashboard?.ordersToday ?? 0}</strong>
-              <small>Current calendar day</small>
+              <strong>{dashboardLoading ? '—' : dashboard?.ordersToday ?? 0}</strong>
+              <small>{dashboardLoading ? 'Loading...' : 'Current calendar day'}</small>
 
             </article>
 
@@ -406,8 +497,8 @@ function Dashboard() {
 
               <span>Open fulfillment</span>
 
-              <strong>{dashboard?.openFulfillment ?? 0}</strong>
-              <small>Pending, processing, and shipped</small>
+              <strong>{dashboardLoading ? '—' : dashboard?.openFulfillment ?? 0}</strong>
+              <small>{dashboardLoading ? 'Loading...' : 'Pending, processing, and shipped'}</small>
             </article>
           </div>
           {dashboardError && <p className="error-state" role="alert">{dashboardError}</p>}
@@ -465,7 +556,9 @@ function Dashboard() {
               </div>
 
               <div className="orders">
-                {recentOrders.length === 0 ? (
+                {recentOrdersLoading ? (
+                  <p className="catalog-state">Loading recent orders...</p>
+                ) : recentOrders.length === 0 ? (
                   <p className="catalog-state">No recent orders found.</p>
                 ) : (
                   recentOrders.map((order) => (
